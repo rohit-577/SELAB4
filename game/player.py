@@ -8,6 +8,7 @@ class Player:
         self.vel_y = 0
         self.on_ground = False
         self.color = (60,160,220)
+        self.standing_on = None
 
     def update(self, keys, platforms, width):
         dx = 0
@@ -19,13 +20,19 @@ class Player:
 
         self.vel_y = min(self.vel_y + 0.55, 12)
         self.rect.x = max(0, min(width - self.rect.width, self.rect.x + dx))
+        prev_bottom = self.rect.bottom
         self.rect.y += int(self.vel_y)
         self.on_ground = False
-        for p in platforms:
-            if self.rect.colliderect(p) and self.vel_y > 0 and self.rect.bottom <= p.bottom + 10:
-                self.rect.bottom = p.top
-                self.vel_y = 0
-                self.on_ground = True
+        self.standing_on = None
+        for i, p in enumerate(platforms):
+            # only land if we were above the platform last frame (one-way)
+            if self.rect.colliderect(p) and self.vel_y > 0:
+                if prev_bottom <= p.top + 10:
+                    self.rect.bottom = p.top
+                    self.vel_y = 0
+                    self.on_ground = True
+                    self.standing_on = i
+                    break
 
     def draw(self, screen, cam_y):
         dr = self.rect.move(0, -int(cam_y))
