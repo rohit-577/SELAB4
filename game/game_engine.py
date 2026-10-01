@@ -41,6 +41,8 @@ class GameEngine:
         self.won=False
         self.top_y=self.platforms[-1].y
         self.frame=0
+        self.surge_cd=15*FPS  # frames till next burst
+        self.surge_left=0  # frames left in current burst
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -95,7 +97,18 @@ class GameEngine:
                 self.player.standing_on-=1
         target=self.player.rect.centery-HEIGHT//2
         if target<self.cam_y: self.cam_y=target
-        self.lava_y-=self.lava_rise
+        # lava surge - every 15 sec do a 3 sec burst
+        rise=self.lava_rise
+        if self.surge_left>0:
+            self.surge_left-=1
+            rise=self.lava_rise*2.5+0.6
+            if self.surge_left==0:
+                self.surge_cd=15*FPS
+        else:
+            self.surge_cd-=1
+            if self.surge_cd<=0:
+                self.surge_left=3*FPS
+        self.lava_y-=rise
         self.lava_rise=min(1.2,self.lava_rise+0.0003)
         self.score=max(0,(GROUND_Y-self.player.rect.y)//10)
         self.frame+=1
@@ -131,6 +144,25 @@ class GameEngine:
         draw_lava(self.screen,self.lava_y,self.cam_y,WIDTH,HEIGHT,self.frame)
         sc=self.font.render(f"Height: {self.score}m  R=Restart",True,(220,200,180))
         self.screen.blit(sc,(8,10))
+        # danger meter - fills as lava gets faster
+        frac=(self.lava_rise-0.4)/(1.2-0.4)
+        frac=max(0,min(1,frac))
+        bx,by,bw,bh=340,12,140,16
+        pygame.draw.rect(self.screen,(50,50,50),(bx-2,by-2,bw+4,bh+4),border_radius=3)
+        # green to red
+        col=(int(80+140*frac),int(200-150*frac),40)
+        pygame.draw.rect(self.screen,col,(bx,by,int(bw*frac),bh),border_radius=2)
+        dl=self.font.render("DANGER",True,(220,200,180))
+        self.screen.blit(dl,(bx,by+18))
+        # surge warning
+        if self.surge_left>0:
+            # flashing red text
+            if (self.frame%10<6):
+                w=self.font.render("!! LAVA BURST !!",True,(255,60,20))
+                self.screen.blit(w,(WIDTH//2-w.get_width()//2,60))
+        elif self.surge_cd<3*FPS:
+            w=self.font.render("WARNING: surge soon",True,(255,180,60))
+            self.screen.blit(w,(WIDTH//2-w.get_width()//2,60))
         if self.game_over:
             self._msg("LAVA GOT YOU!",(220,80,40))
         if self.won:
