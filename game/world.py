@@ -3,6 +3,7 @@ import random
 
 PLATFORM_COLOR = (100,80,50)
 CRUMBLE_COLOR = (180,110,60)
+SPRING_COLOR = (240,210,50)
 LAVA_COLOR = (220,60,20)
 
 def generate_platforms(width, base_y, count=30):

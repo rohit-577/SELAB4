@@ -1,7 +1,7 @@
 import pygame
 import random
 from game.player import Player
-from game.world import generate_platforms, draw_lava, PLATFORM_COLOR, CRUMBLE_COLOR
+from game.world import generate_platforms, draw_lava, PLATFORM_COLOR, CRUMBLE_COLOR, SPRING_COLOR
 
 WIDTH,HEIGHT=500,640
 FPS=60
@@ -26,7 +26,12 @@ class GameEngine:
         for i in range(2,len(self.platforms)-1):
             if i%4==0:
                 self.ptypes[i]='crumble'
+        # yellow spring platforms, dont overlap with crumble
+        for i in range(3,len(self.platforms)-1):
+            if i%6==0 and self.ptypes[i]=='normal':
+                self.ptypes[i]='spring'
         self.crumble_t=[0]*len(self.platforms)  # 0 means untouched, else frames touched
+        self.spring_anim={}  # idx -> frames left for recoil effect
         self.player=Player(WIDTH//2-16,GROUND_Y-50)
         self.cam_y=0
         self.lava_y=GROUND_Y+60
@@ -52,6 +57,18 @@ class GameEngine:
         if idx is not None and idx<len(self.ptypes) and self.ptypes[idx]=='crumble':
             if self.crumble_t[idx]==0:
                 self.crumble_t[idx]=1
+        # spring logic - big bounce
+        if idx is not None and idx<len(self.ptypes) and self.ptypes[idx]=='spring':
+            self.player.vel_y=-22
+            self.player.on_ground=False
+            self.player.standing_on=None
+            self.spring_anim[idx]=15  # recoil anim frames
+            idx=None
+        # tick spring anims
+        for k in list(self.spring_anim.keys()):
+            self.spring_anim[k]-=1
+            if self.spring_anim[k]<=0:
+                del self.spring_anim[k]
         # tick all crumbling platforms, remove after 60 frames (1 sec)
         remove=[]
         for i in range(len(self.platforms)):
@@ -63,6 +80,13 @@ class GameEngine:
             del self.platforms[i]
             del self.ptypes[i]
             del self.crumble_t[i]
+            # shift spring anim keys too
+            new_anim={}
+            for k,v in self.spring_anim.items():
+                if k==i: continue
+                elif k>i: new_anim[k-1]=v
+                else: new_anim[k]=v
+            self.spring_anim=new_anim
             # fix standing index if needed
             if self.player.standing_on==i:
                 self.player.standing_on=None
@@ -92,6 +116,15 @@ class GameEngine:
                     if self.crumble_t[i]>40 and (self.frame%6<3):
                         continue  # flicker
                 pygame.draw.rect(self.screen,CRUMBLE_COLOR,dr,border_radius=4)
+            elif self.ptypes[i]=='spring':
+                # recoil - squash down for a few frames after bounce
+                if i in self.spring_anim:
+                    dr=pygame.Rect(dr.x,dr.y+6,dr.width,max(6,dr.height-6))
+                pygame.draw.rect(self.screen,SPRING_COLOR,dr,border_radius=4)
+                # draw spring coils on top
+                cx=dr.centerx
+                pygame.draw.line(self.screen,(120,90,20),(cx-12,dr.y),(cx+12,dr.y),2)
+                pygame.draw.line(self.screen,(120,90,20),(cx-8,dr.y-4),(cx+8,dr.y-4),2)
             else:
                 pygame.draw.rect(self.screen,PLATFORM_COLOR,dr,border_radius=4)
         self.player.draw(self.screen,self.cam_y)
