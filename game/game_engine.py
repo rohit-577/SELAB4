@@ -1,6 +1,7 @@
 import pygame
+import random
 from game.player import Player
-from game.world import generate_platforms, draw_lava, PLATFORM_COLOR
+from game.world import generate_platforms, draw_lava, PLATFORM_COLOR, CRUMBLE_COLOR
 
 WIDTH,HEIGHT=500,640
 FPS=60
@@ -19,6 +20,13 @@ class GameEngine:
 
     def reset(self):
         self.platforms=generate_platforms(WIDTH,GROUND_Y)
+        # mark some platforms as crumbling (skip ground and top one)
+        self.ptypes=['normal']*len(self.platforms)
+        self.ptypes[0]='ground'
+        for i in range(2,len(self.platforms)-1):
+            if i%4==0:
+                self.ptypes[i]='crumble'
+        self.crumble_t=[0]*len(self.platforms)  # 0 means untouched, else frames touched
         self.player=Player(WIDTH//2-16,GROUND_Y-50)
         self.cam_y=0
         self.lava_y=GROUND_Y+60
@@ -39,6 +47,28 @@ class GameEngine:
         if self.game_over or self.won: return
         keys=pygame.key.get_pressed()
         self.player.update(keys,self.platforms,WIDTH)
+        # crumbling logic - start timer when player stands on it
+        idx=self.player.standing_on
+        if idx is not None and idx<len(self.ptypes) and self.ptypes[idx]=='crumble':
+            if self.crumble_t[idx]==0:
+                self.crumble_t[idx]=1
+        # tick all crumbling platforms, remove after 60 frames (1 sec)
+        remove=[]
+        for i in range(len(self.platforms)):
+            if self.ptypes[i]=='crumble' and self.crumble_t[i]>0:
+                self.crumble_t[i]+=1
+                if self.crumble_t[i]>60:
+                    remove.append(i)
+        for i in reversed(remove):
+            del self.platforms[i]
+            del self.ptypes[i]
+            del self.crumble_t[i]
+            # fix standing index if needed
+            if self.player.standing_on==i:
+                self.player.standing_on=None
+                self.player.on_ground=False
+            elif self.player.standing_on is not None and self.player.standing_on>i:
+                self.player.standing_on-=1
         target=self.player.rect.centery-HEIGHT//2
         if target<self.cam_y: self.cam_y=target
         self.lava_y-=self.lava_rise
@@ -52,9 +82,18 @@ class GameEngine:
 
     def draw(self):
         self.screen.fill(BG)
-        for p in self.platforms:
+        for i,p in enumerate(self.platforms):
             dr=p.move(0,-int(self.cam_y))
-            pygame.draw.rect(self.screen,PLATFORM_COLOR,dr,border_radius=4)
+            if self.ptypes[i]=='crumble':
+                # shake when timer started
+                if self.crumble_t[i]>0:
+                    dr.x+=random.randint(-3,3)
+                    # blink as it is about to break
+                    if self.crumble_t[i]>40 and (self.frame%6<3):
+                        continue  # flicker
+                pygame.draw.rect(self.screen,CRUMBLE_COLOR,dr,border_radius=4)
+            else:
+                pygame.draw.rect(self.screen,PLATFORM_COLOR,dr,border_radius=4)
         self.player.draw(self.screen,self.cam_y)
         draw_lava(self.screen,self.lava_y,self.cam_y,WIDTH,HEIGHT,self.frame)
         sc=self.font.render(f"Height: {self.score}m  R=Restart",True,(220,200,180))
